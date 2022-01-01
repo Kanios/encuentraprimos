@@ -71,6 +71,12 @@ int main(int argc, char* argv[])
     int numhijos;
 
     // Control de entrada, después del nombre del script debe figurar el número de hijos y el parámetro verbosity
+    
+    //numhijos = (int)argv[0];
+    //verbosity = (int)argv[1];
+    
+    numhijos = argv[0] - '0';
+    verbosity = argv[1] - '0';
 
     numhijos = 2;     // SOLO para el esqueleto, en el proceso  definitivo vendrá por la entrada
 
@@ -106,7 +112,12 @@ int main(int argc, char* argv[])
 			   {   // Rama hijo
 				parentpid = getppid();
 				mypid = getpid();
+				//pause(); //
 			   }
+			   /*
+			 else {
+				 kill(pid, SIGSTOP); //pa
+			 }*/
 			 }
 		 i++;  // Número de hijos creados
 		}
@@ -119,9 +130,29 @@ int main(int argc, char* argv[])
 			sprintf(message.mesg_text,"%d",mypid);
 			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
 			
+			pause();
 			
 			// Un montón de código por escribir
-			sleep(60); // Esto es solo para que el esqueleto no muera de inmediato, quitar en el definitivo
+			// No se si hay que poner una condicion de que el SERVER haya hecho el envio que hay que recoger
+			//copypasted
+			msgrcv(msgid, &message, sizeof(message), 0, 0);
+			sscanf(message.mesg_text, "%d", &numero);//pseudo
+			printf("\nEl CALCulador %d empieza a calcular desde %d\n", mypid, numero);//pseudo
+			
+			//Bucle de busqueda de primos
+			//SIN TERMINAR
+			message.mesg_type = COD_RESULTADOS;
+			for(i = 0; i < (RANGO / numhijos); i++){
+				//Si numero es primo lo mando por la cola de mensajeria
+				if(Comprobarsiesprimo(numero)){
+					sprintf(message.mesg_text, "%d", numero);
+					msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
+					printf("Encontrado numero primo: %d\n", numero);
+				}
+				numero++;
+			}
+			printf("Soy el hijo %d y he terminado de calcular y me muero\n", mypid);
+			//sleep(60); // Esto es solo para que el esqueleto no muera de inmediato, quitar en el definitivo
 
 			exit(0);
 		}
@@ -133,18 +164,23 @@ int main(int argc, char* argv[])
 		  // Pide memoria dinámica para crear la lista de pids de los hijos CALCuladores
 		  pidhijos = malloc(sizeof(int) * numhijos); //FALTA poner free(pidhijos); en algun lado
 		  
-		  //Recepción de los mensajes COD_ESTOY_AQUI de los hijos
+		  // Recepción de los mensajes COD_ESTOY_AQUI de los hijos
 		  for (j=0; j <numhijos; j++)
 		  {
 			  msgrcv(msgid, &message, sizeof(message), 0, 0);
-			  sscanf(message.mesg_text,"%d",&pid); // Tendrás que guardar esa pid
+			  sscanf(message.mesg_text,"%d",&pid); // Tendrás que guardar esa pid 
 			  printf("\nMe ha enviado un mensaje el hijo %d\n",pid);
+			  pidhijos[j] = pid; //guardo esa pid
 		  }
+		  // Envio del numero por el que empieza cada hijo y cuantos valores debe recorrer
 			message.mesg_type = COD_LIMITES;
-		  for (j=0; j <numhijos; j++){ //Pseudocodigo delante
-			sprintf(message.mesg_text, "%d", ((pid - pidservidor - 1) * RANGO / numhijos) + BASE);
+		  for (j = 0; j < numhijos; j++){
+			sprintf(message.mesg_text, "%d", (j * RANGO / numhijos) + BASE);
 			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
+			
+			kill(pidhijos[j], SIGALRM); //
 		  }
+		  
 			sleep(60); // Esto es solo para que el esqueleto no muera de inmediato, quitar en el definitivo
 
 		  
@@ -152,6 +188,7 @@ int main(int argc, char* argv[])
 		  
 		  // Borrar la cola de mensajería, muy importante. No olvides cerrar los ficheros
 		  msgctl(msgid,IPC_RMID,NULL);
+		  free(pidhijos);
 		  
 	   }
     }
@@ -180,16 +217,19 @@ static void alarmHandler(int signo)
 
 }
 
+//Funcion que imprime las pid de todos los procesos
 void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos){
 	printf("RAIZ		SERV		CALC\n");
 	printf("%d%16d%16d\n", pidraiz, pidservidor, pidhijos[0]);
 	for(int i = 1; i < numhijos; i++) printf("				%d\n",pidhijos[i]);
 }
 
+//Funcion que comprueba si un numero es primo 
+//devuelve 1 si es primo
 int Comprobarsiesprimo(long int numero) {
-  if (numero < 2) return 0; // Por convenio 0 y 1 no son primos ni compuestos
+  if(numero < 2) return 0; // Por convenio 0 y 1 no son primos ni compuestos
   else
-	for (int x = 2; x <= (numero / 2) ; x++)
-		if (numero % x == 0) return 0;
+	for(int x = 2; x <= (numero / 2); x++)
+		if(numero % x == 0) return 0;
   return 1;
 }
