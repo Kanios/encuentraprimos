@@ -46,11 +46,14 @@ void Informar(char *texto, int verboso);
 void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos);
 int ContarLineas();
 static void alarmHandler(int signo);
+//void primoHandler(int msgid, long int numero, int nrango, T_MESG_BUFFER message);
+
+//void functest();
 
 int cuentasegs;                   // Variable para el cómputo del tiempo total
 
 int main(int argc, char* argv[])
-{
+{	
 	int i,j;
 	long int numero;
 	long int numprimrec;
@@ -75,10 +78,11 @@ int main(int argc, char* argv[])
     //numhijos = (int)argv[0];
     //verbosity = (int)argv[1];
     
-    numhijos = argv[0] - '0';
-    verbosity = argv[1] - '0';
+    numhijos = (int)argv[0] - '0';
+    verbosity = (int)argv[1] - '0';
 
-    numhijos = 2;     // SOLO para el esqueleto, en el proceso  definitivo vendrá por la entrada
+    numhijos = 3;     // SOLO para el esqueleto, en el proceso  definitivo vendrá por la entrada
+    verbosity = 1;
 
     pid=fork();       // Creación del SERVER
     
@@ -112,46 +116,51 @@ int main(int argc, char* argv[])
 			   {   // Rama hijo
 				parentpid = getppid();
 				mypid = getpid();
-				//pause(); //
-			   }
-			   /*
-			 else {
-				 kill(pid, SIGSTOP); //pa
+			   } 
+			 /*else{
+				 kill(pid, SIGSTOP);
 			 }*/
-			 }
+		 }
 		 i++;  // Número de hijos creados
 		}
 
         // AQUI VA LA LOGICA DE NEGOCIO DE CADA CALCulador. 
 		if (mypid != pidservidor)
 		{
-
+			//printf("Soy el hijo %d\n", mypid);
+			
 			message.mesg_type = COD_ESTOY_AQUI;
-			sprintf(message.mesg_text,"%d",mypid);
+			sprintf(message.mesg_text, "%d", mypid);
 			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
 			
-			pause();
-			
+			printf("Pauso CALCulador %d\n", mypid);
+			kill(mypid, SIGSTOP); //Intuyo que si un proceso se SIGSTOP a si mismo su padre no puede SIGCONT
+			printf("CALCulador %d despausado con exito\n", mypid); //SERVER NO llega a despausar a los hijos
+
 			// Un montón de código por escribir
-			// No se si hay que poner una condicion de que el SERVER haya hecho el envio que hay que recoger
-			//copypasted
+			
+			//signal(SIGUSR1, functest);
+			//signal(SIGALRM, primoHandler(msgid, numero, nrango, message));
+			//sigwait(SIGUSR1, dump);
+			
 			msgrcv(msgid, &message, sizeof(message), 0, 0);
-			sscanf(message.mesg_text, "%d", &numero);//pseudo
-			printf("\nEl CALCulador %d empieza a calcular desde %d\n", mypid, numero);//pseudo
+			sscanf(message.mesg_text, "%ld %d", &numero, &nrango); 
+			printf("\nEl CALCulador %d empieza a calcular desde %ld con un rango de %d\n", mypid, numero, nrango);
 			
 			//Bucle de busqueda de primos
 			//SIN TERMINAR
 			message.mesg_type = COD_RESULTADOS;
-			for(i = 0; i < (RANGO / numhijos); i++){
+			for(i = 0; i < nrango; i++){
 				//Si numero es primo lo mando por la cola de mensajeria
 				if(Comprobarsiesprimo(numero)){
-					sprintf(message.mesg_text, "%d", numero);
+					sprintf(message.mesg_text, "%d %ld", mypid, numero); //mando la pid de hijo que encuentra el primo y el primo encontrado
 					msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
-					printf("Encontrado numero primo: %d\n", numero);
+					if(verbosity > 0) printf("El hijo %d a encontrado el primo %ld\n", mypid, numero);
 				}
 				numero++;
 			}
 			printf("Soy el hijo %d y he terminado de calcular y me muero\n", mypid);
+			
 			//sleep(60); // Esto es solo para que el esqueleto no muera de inmediato, quitar en el definitivo
 
 			exit(0);
@@ -162,26 +171,33 @@ int main(int argc, char* argv[])
 		else
 		{ 
 		  // Pide memoria dinámica para crear la lista de pids de los hijos CALCuladores
-		  pidhijos = malloc(sizeof(int) * numhijos); //FALTA poner free(pidhijos); en algun lado
-		  
+		  pidhijos = malloc(sizeof(int) * numhijos); //FALTA poner free(pidhijos) en algun lado
+		  sleep(2); //Testing
 		  // Recepción de los mensajes COD_ESTOY_AQUI de los hijos
 		  for (j=0; j <numhijos; j++)
 		  {
 			  msgrcv(msgid, &message, sizeof(message), 0, 0);
 			  sscanf(message.mesg_text,"%d",&pid); // Tendrás que guardar esa pid 
-			  printf("\nMe ha enviado un mensaje el hijo %d\n",pid);
+			  printf("\nMe ha enviado un mensaje el hijo %d\n", pid);
 			  pidhijos[j] = pid; //guardo esa pid
-		  }
-		  // Envio del numero por el que empieza cada hijo y cuantos valores debe recorrer
-			message.mesg_type = COD_LIMITES;
-		  for (j = 0; j < numhijos; j++){
-			sprintf(message.mesg_text, "%d", (j * RANGO / numhijos) + BASE);
-			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
-			
-			kill(pidhijos[j], SIGALRM); //
+			  printf("Guardado pid hijo: %d\n", pidhijos[j]); //Comentado porque el malloc() funciona correctamente
 		  }
 		  
-			sleep(60); // Esto es solo para que el esqueleto no muera de inmediato, quitar en el definitivo
+		  //Imprimo la jerarquia de procesos 
+		  Imprimirjerarquiaproc(getppid(), pidservidor, pidhijos, numhijos);
+		  
+		  // Envio del numero por el que empieza cada hijo y cuantos valores debe recorrer
+		  message.mesg_type = COD_LIMITES;
+		  for (j = 0; j < numhijos; j++){
+			sprintf(message.mesg_text, "%ld %d", (long)(j * RANGO / numhijos) + BASE, RANGO / numhijos); //Esto SI funciona, lo he probado
+			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
+			printf("Envio numero inicial %d y el rango %d\n", (j * RANGO / numhijos) + BASE, RANGO / numhijos);
+			
+			printf("Despauso CALCuladores...\n");
+			kill(pidhijos[j], SIGCONT); //ESTO NO FUNCIONA, NO REVIVE A LOS CALCuladores
+		  }
+		  
+			//sleep(60); // Esto es solo para que el esqueleto no muera de inmediato, quitar en el definitivo
 
 		  
 		  // Mucho código con la lógica de negocio de SERVER
@@ -217,11 +233,33 @@ static void alarmHandler(int signo)
 
 }
 
+//Funcion que
+/*void primoHandler(int msgid, long int numero, int nrango, T_MESG_BUFFER message, int mypid){
+	msgrcv(msgid, &message, sizeof(message), 0, 0);
+	sscanf(message.mesg_text, "%d %d", &numero, &nrango);
+	printf("\nEl CALCulador %d empieza a calcular desde %d con un rango de %d\n", mypid, numero, nrango);
+			
+	//Bucle de busqueda de primos
+	message.mesg_type = COD_RESULTADOS;
+	for(i = 0; i < (RANGO / numhijos); i++){
+		//Si numero es primo lo mando por la cola de mensajeria
+		if(Comprobarsiesprimo(numero)){
+			sprintf(message.mesg_text, "%d %d", mypid, numero); //mando la pid de hijo que encuentra el primo y el primo encontrado
+			msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT);
+			if(verbosity > 0) printf("El hijo %d a encontrado el primo %d\n", mypid, numero);
+		}
+		numero++;
+	}
+	printf("Soy el hijo %d y he terminado de calcular y me muero\n", mypid)
+}*/
+
 //Funcion que imprime las pid de todos los procesos
-void Imprimirjerarquiaproc(int pidraiz,int pidservidor, int *pidhijos, int numhijos){
-	printf("RAIZ		SERV		CALC\n");
+void Imprimirjerarquiaproc(int pidraiz, int pidservidor, int *pidhijos, int numhijos){
+	printf("\nJerarquia de procesos:");
+	printf("\nRAIZ		SERV		CALC\n");
 	printf("%d%16d%16d\n", pidraiz, pidservidor, pidhijos[0]);
 	for(int i = 1; i < numhijos; i++) printf("				%d\n",pidhijos[i]);
+	printf("\n");
 }
 
 //Funcion que comprueba si un numero es primo 
@@ -233,3 +271,7 @@ int Comprobarsiesprimo(long int numero) {
 		if(numero % x == 0) return 0;
   return 1;
 }
+
+/*void functest(){
+	printf("esto se despausa :D\n");
+}*/
