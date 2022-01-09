@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
     FILE *fsal, *fc;
     int numhijos;
 
-    // Control de entrada, después del nombre del script debe figurar el número de hijos y el parámetro verbosity
+    // Control de entrada, después del nombre del script debe figurar el número de hijos y verbosity
     
     //numhijos = (int)argv[0];
     //verbosity = (int)argv[1];
@@ -110,7 +110,7 @@ int main(int argc, char* argv[])
         i = 0;
         // Creación de los procesos CALCuladores
 		while(i < numhijos) {
-		 if (pid > 0) { // Solo SERVER creará hijos
+		 if (pid > 0) { // Solo el SERVER creará hijos
 			 pid=fork(); 
 			 if (pid == 0) 
 			   {   // Rama hijo
