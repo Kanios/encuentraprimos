@@ -24,11 +24,9 @@
 #define NOMBRE_FICH_CUENTA "cuentaprimos.txt"
 #define CADA_CUANTOS_ESCRIBO 5
 
-// Rango de búsqueda, desde BASE a BASE+RANGO
+//Rango de búsqueda, desde BASE a BASE+RANGO
 #define BASE 800000000
 #define RANGO 2000
-//#define BASE 800000
-//#define RANGO 200
 
 //Intervalo del temporizador para RAIZ
 #define INTERVALO_TIMER 5
@@ -49,7 +47,7 @@ typedef struct {
 int Comprobarsiesprimo(long int numero);
 void Informar(char *texto, int verboso);
 void Imprimirjerarquiaproc(int pidraiz, int pidservidor, int *pidhijos, int numhijos);
-int ContarLineas();
+int ContarLineas(FILE *fichero);
 static void alarmHandler(int signo);
 
 //Variables globales
@@ -74,7 +72,7 @@ int main(int argc, char* argv[]){
     int verbosity;
     T_MESG_BUFFER message;
     char info[LONGITUD_MSG_ERR];
-    FILE *fsal, *fc;
+    FILE *fsa, *fc;
     int numhijos;
 	int contfin = 0;
 	
@@ -142,31 +140,24 @@ int main(int argc, char* argv[]){
 			sprintf(message.mesg_text, "%d", mypid);
 			if(msgsnd( msgid, &message, sizeof(message), IPC_NOWAIT) == -1) perror("CALC: msgsnd() de COD_ESTOY_AQUI");
 			
-			//Pausado de los hijos a espera del mensaje COD_LIMITES del padre
-			//printf("CALC: Pauso CALCulador mypid = %d\n", mypid);
-			kill(mypid, SIGSTOP);
-			//printf("CALC: CALCulador %d despausado con exito\n", mypid);
-			
 			//Recepcion de los mensajes con los limites y numeros por lo que comenzar
-			if(msgrcv(msgid, &message, sizeof(message), COD_LIMITES, 0) == -1) perror("CALC: msgrcv() de COD_LIMITES"); //ESTE era el problema, el error era causado por borrar la cola de mensajeria demasiado pronto
+			if(msgrcv(msgid, &message, sizeof(message), COD_LIMITES, 0) == -1) perror("CALC: msgrcv() de COD_LIMITES"); //ESTE era un problema, el error era causado por borrar la cola de mensajeria demasiado pronto
 			sscanf(message.mesg_text, "%ld %d", &numero, &nrango); 
-			printf("\nCALC: El CALCulador %d empieza a calcular desde %ld con un rango de %d\n", mypid, numero, nrango);
+			printf("CALC: El CALCulador %d empieza a calcular desde %ld con un rango de %d\n\n", mypid, numero, nrango);
 			
 			//Bucle de busqueda de numeros primos
 			message.mesg_type = COD_RESULTADOS;
 			for(i = 0; i < nrango; i++){ 
-				//printf("CALC: %ld\n", numero); TODO:
 				//Si numero es primo lo mando por la cola de mensajeria junto con el pid quien lo calculo
 				if(Comprobarsiesprimo(numero)){
 					sprintf(message.mesg_text, "%d %ld", mypid, numero);
 					if(msgsnd(msgid, &message, sizeof(message), IPC_NOWAIT) == -1) perror("CALC: msgsnd() de COD_RESULTADOS");
-					//printf("CALC: El hijo %d a encontrado el primo %ld\n", mypid, numero); TODO:
 				}
 				numero++;
 			}
 			
 			//Envio de mensaje de terminacion de proceso CALCulador
-			printf("CALC: Soy el hijo %d y he terminado de calcular y me muero\n", mypid);
+			printf("\nCALC: Soy el hijo %d, he terminado de calcular y me muero\n\n", mypid);
 			message.mesg_type = COD_FIN;
 			if(msgsnd(msgid, &message, sizeof(message), IPC_NOWAIT) == -1) perror("CALC: msgsnd() de COD_FIN");
 			
@@ -179,7 +170,7 @@ int main(int argc, char* argv[]){
 		else{
 			
 			//Pide memoria dinámica para crear la lista de pids de los hijos CALCuladores
-			pidhijos = malloc(sizeof(int) * numhijos); //TODO: No olvidar free(pidhijos)
+			pidhijos = malloc(sizeof(int) * numhijos);
 		  
 			//Recepción de los mensajes COD_ESTOY_AQUI de los hijos
 			for(j = 0; j < numhijos; j++){
@@ -198,19 +189,15 @@ int main(int argc, char* argv[]){
 			for(j = 0; j < numhijos; j++){
 				sprintf(message.mesg_text, "%ld %d", (long)(j * RANGO / numhijos) + BASE, RANGO / numhijos); //Esto SI funciona, lo he probado
 				if(msgsnd(msgid, &message, sizeof(message), IPC_NOWAIT) == -1) perror("SERVER: msgsnd() de COD_LIMITES");
-				printf("\nSERVER: Envio numero inicial %d y el rango %d\n", (j * RANGO / numhijos) + BASE, RANGO / numhijos);
-			
-				//printf("SERVER: Despauso CALCuladores...\n");
-				kill(pidhijos[j], SIGCONT);
+				printf("SERVER: Envio numero inicial %d y el rango %d\n\n", (j * RANGO / numhijos) + BASE, RANGO / numhijos);
 			}
 			
 			//Comienzo del temporizador de tiempo de computo
 			tstart = time(NULL);
 			
 			//Bucle que recive los numeros primos de los CALCuladores
-			while(contfin < numhijos){//TODO: Leer mensaje de cualquier tipo y hacer con if else lo apropido //ipcs
-				//printf("SERVER: Valor de contfin = %d\n", contfin); //TODO: TESTING
-				if(msgrcv(msgid, &message, sizeof(message), COD_LIMITES, MSG_EXCEPT) == -1) perror("SERVER: msgrcv() de COD_RESULTADOS/COD_FIN"); //TODO: Creo que lee los mensajes COD_LIMITES, solucion un poco cutre
+			while(contfin < numhijos){
+				if(msgrcv(msgid, &message, sizeof(message), COD_LIMITES, MSG_EXCEPT) == -1) perror("SERVER: msgrcv() de COD_RESULTADOS/COD_FIN");
 				sscanf(message.mesg_text, "%d %ld", &pidcalc, &numprimrec);
 				if(message.mesg_type == COD_RESULTADOS){
 					if(verbosity > 0) printf("SERVER: El hijo %d a encontrado el primo %ld\n", pidcalc, numprimrec);
@@ -227,10 +214,6 @@ int main(int argc, char* argv[]){
 			
 			//Tiempo de computo total
 			printf("\nEl tiempo total de calculo es de %.2f segundos\n", difftime(tend, tstart));
-			
-			//Cierre de los ficheros
-			fclose(fsal);
-			fclose(fc);
 			
 			//Borrado de la cola de mansajeria
 			if(msgctl(msgid, IPC_RMID, NULL) == -1) perror("SERVER: msgctl() borrar cola");
@@ -250,21 +233,35 @@ int main(int argc, char* argv[]){
 		pidraiz = getpid();
 		alarm(INTERVALO_TIMER);
 		signal(SIGALRM, alarmHandler);
-		for(;;)    //Solo para el esqueleto
-		sleep(1); //Solo para el esqueleto
 		
 		//Espera al final de SERVER
 		wait(NULL);
-		
-		//El final de todo
-		return 0;
+		fclose(fsal);
+		fsal = fopen("primo.txt", "r");
+		//Recuento de lineas del fichero primos.txt
+		printf("\nEl numero total de primos calculados es %d\n", ContarLineas(fsal));
 	}
+	
+	//Cierre de los ficheros
+	fclose(fsal);
+	fclose(fc);
+	
+	//El final de todo
+	return 0;
 }
 
 //Manejador de la alarma en el RAIZ
-static void alarmHandler(int signo){
+static void alarmHandler(int signo){ //El puntero del fichero puede que no vuelva al inicio
     printf("\nSOLO PARA EL ESQUELETO... Han pasado 5 segundos\n");
-    
+    /*
+    int numero;
+    printf("\n");
+    while(!feof(fc)){
+		fscanf(fc, "%d", &numero);
+		printf("%d\n", numero);
+	}
+	printf("\n");
+	*/
     alarm(INTERVALO_TIMER);
 }
 
@@ -274,7 +271,7 @@ void Imprimirjerarquiaproc(int pidraiz, int pidservidor, int *pidhijos, int numh
 	printf("\nRAIZ		SERV		CALC\n");
 	printf("%d%16d%16d\n", pidraiz, pidservidor, pidhijos[0]);
 	for(int i = 1; i < numhijos; i++) printf("				%d\n",pidhijos[i]);
-	printf("\n");
+	printf("\n\n");
 }
 
 //Funcion que comprueba si un numero es primo, devuelve 1 si es primo
@@ -286,3 +283,15 @@ int Comprobarsiesprimo(long int numero){
 	}
 	return 1;
 }
+
+//Funcion que cuentas la lineas de un fichero
+int ContarLineas(FILE *fichero){
+	int lineas = 0;
+	while(!feof(fichero)){
+		if(fgetc(fichero) == '\n') {
+		lineas++;
+		}
+	}
+	return lineas;
+}
+

@@ -3,4 +3,8 @@
 
 Rubén Pascual Más
 
-NOTA: Compilar de la siguiente manera: gcc -D_GNU_SOURCE encuentraprimos.c -o encuentraprimos
+
+NOTAS:
+
+-Compilar de la siguiente manera: gcc -D_GNU_SOURCE encuentraprimos.c -o encuentraprimos.
+
