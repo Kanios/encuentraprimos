@@ -76,9 +76,11 @@ int main(int argc, char* argv[]){
     char info[LONGITUD_MSG_ERR];
     FILE *fsal, *fc;
     int numhijos;
+
 	int contfin = 0;
 	
     //Control de entrada, después del nombre del script debe figurar el número de hijos y el verbosity
+
     
     numhijos = strtol(argv[1], NULL, 10);
     verbosity = strtol(argv[2], NULL, 10);
@@ -122,16 +124,20 @@ int main(int argc, char* argv[]){
 
         i = 0;
         
-        //Creación de los procesos CALCuladores
-		while(i < numhijos){
-			if(pid > 0){ //Solo el SERVER creará hijos
-				pid = fork(); 
-				if(pid == 0){   //Rama hijo
-					parentpid = getppid();
-					mypid = getpid();
-				} 
-			}
-			i++;  //Número de hijos creados
+        // Creación de los procesos CALCuladores
+		while(i < numhijos) {
+		 if (pid > 0) { // Solo el SERVER creará hijos
+			 pid=fork(); 
+			 if (pid == 0) 
+			   {   // Rama hijo
+				parentpid = getppid();
+				mypid = getpid();
+			   } 
+			 /*else{
+				 kill(pid, SIGSTOP);
+			 }*/
+		 }
+		 i++;  // Número de hijos creados
 		}
 
         //Logica de negocio de cada CALCulador 
