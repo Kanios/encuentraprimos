@@ -72,7 +72,7 @@ int main(int argc, char* argv[]){
     int verbosity;
     T_MESG_BUFFER message;
     char info[LONGITUD_MSG_ERR];
-    FILE *fsa, *fc;
+    FILE *fsal, *fc;
     int numhijos;
 	int contfin = 0;
 	
